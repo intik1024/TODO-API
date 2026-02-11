@@ -27,6 +27,15 @@ class TodoAndPriority(BaseModel):
 class SortOrder(str, Enum):
     asc = 'asc'
     desc = 'desc'
+@app.get('/todos/grouped')
+def SearchTegis():
+    grouded={}
+    for task in todos:
+         for tag in task.tegi:
+             if tag not in grouded:
+                 grouded[tag]=[]
+             grouded[tag].append(task)
+    return grouded
 
 @app.get('/todos', response_model=List[TodoAndPriority])
 def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр по приоритету'),SortTegi:Optional[str]=Query(None,description='Поиск по тегу'),sort_by: Optional[str] = Query("priority", description="Поле для сортировки"),order: SortOrder = Query(SortOrder.asc, description="Порядок сортировки")):
@@ -74,4 +83,6 @@ def delete_todo(todo_id: int):
         raise HTTPException(status_code=404,detail='Todo not found')
     deleted=todos.pop(todo_id)
     return {'message':'Todo deleted', 'todo':deleted}
+
+
 
