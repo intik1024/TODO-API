@@ -3,6 +3,7 @@ from fastapi import FastAPI,Query
 from pydantic import BaseModel,Field
 from fastapi import HTTPException
 from enum import Enum
+from datetime import date
 
 
 app = FastAPI()
@@ -14,6 +15,7 @@ class Todo(BaseModel):
     title:str
     completed:bool=False
     tegi: List[str]=Field(default_factory=list)
+    due_date: Optional[date]=None
 class Priority(str,Enum):
     low='low'
     medium='medium'
@@ -24,6 +26,7 @@ class TodoAndPriority(BaseModel):
     completed: bool = False
     priority: Priority = Priority.medium
     tegi: List[str]=Field(default_factory=list)
+    due_date: Optional[date]=None
 class SortOrder(str, Enum):
     asc = 'asc'
     desc = 'desc'
@@ -62,7 +65,8 @@ def create_todo(todo:Todo,priority:Priority):
         title=todo.title,
         completed=todo.completed,
         priority=priority,
-        tegi=todo.tegi
+        tegi=todo.tegi,
+        due_date=todo.due_date
     )
     todos.append(todo_with_priorety)
     if priority == Priority.low:
