@@ -30,6 +30,14 @@ class TodoAndPriority(BaseModel):
 class SortOrder(str, Enum):
     asc = 'asc'
     desc = 'desc'
+@app.get('/todos/expering_date')
+def expering_date():
+    today=date.today()
+    exp_date=[]
+    for task in todos:
+        if task.due_date and task.due_date<today:
+            exp_date.append(task)
+    return exp_date
 @app.get('/todos/grouped')
 def SearchTegis():
     grouded={}
