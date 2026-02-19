@@ -1,5 +1,5 @@
 from typing import List,Optional
-from fastapi import FastAPI,Query
+from fastapi import FastAPI,Query,Body
 from pydantic import BaseModel,Field
 from fastapi import HTTPException
 from enum import Enum
@@ -64,6 +64,9 @@ def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр �
         filter_tasks.sort( key=lambda x:priority_order[x.priority],
         reverse=(order==SortOrder.desc)
                           )
+    elif sort_by=='due_date':
+        filter_tasks.sort(key=lambda x: (x.due_date is None,x.due_date),
+                          reverse=(order==SortOrder.desc))
     return filter_tasks
 
 
@@ -95,6 +98,13 @@ def delete_todo(todo_id: int):
         raise HTTPException(status_code=404,detail='Todo not found')
     deleted=todos.pop(todo_id)
     return {'message':'Todo deleted', 'todo':deleted}
-
+@app.patch('/todos/{todo_id}')
+def update_completed (todo_id:int,completed:bool=Body(...,embed=True)):
+    if todo_id>=len(todos):
+        raise HTTPException(status_code=404,detail='Todo not found')
+    todos[todo_id].completed=completed
+    return {'message' :f'todo update to {completed}',
+            'todo':todos[todo_id]
+    }
 
 
