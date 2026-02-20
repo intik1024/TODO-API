@@ -49,8 +49,9 @@ def SearchTegis():
     return grouded
 
 @app.get('/todos', response_model=List[TodoAndPriority])
-def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр по приоритету'),SortTegi:Optional[str]=Query(None,description='Поиск по тегу'),sort_by: Optional[str] = Query("priority", description="Поле для сортировки"),order: SortOrder = Query(SortOrder.asc, description="Порядок сортировки")):
+def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр по приоритету'),SortTegi:Optional[str]=Query(None,description='Поиск по тегу'),sort_by: Optional[str] = Query("priority", description="Поле для сортировки"),order: SortOrder = Query(SortOrder.asc, description="Порядок сортировки"),skip:int = Query(0,ge=0,description='Сколько задач пропустить'),limit:int=Query(10,ge=1,le=100,description='Сколько задач вернуть')):
     filter_tasks=todos.copy()
+
     if priority:
         filter_tasks=[task for task in filter_tasks if task.priority==priority]
     if SortTegi:
@@ -67,7 +68,8 @@ def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр �
     elif sort_by=='due_date':
         filter_tasks.sort(key=lambda x: (x.due_date is None,x.due_date),
                           reverse=(order==SortOrder.desc))
-    return filter_tasks
+    paginat_tasks=filter_tasks[skip:skip+limit]
+    return paginat_tasks
 
 
 @app.post('/todos')
