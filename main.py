@@ -38,6 +38,7 @@ def expering_date():
         if task.due_date and task.due_date<today:
             exp_date.append(task)
     return exp_date
+
 @app.get('/todos/grouped')
 def SearchTegis():
     grouded={}
@@ -49,13 +50,15 @@ def SearchTegis():
     return grouded
 
 @app.get('/todos', response_model=List[TodoAndPriority])
-def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр по приоритету'),SortTegi:Optional[str]=Query(None,description='Поиск по тегу'),sort_by: Optional[str] = Query("priority", description="Поле для сортировки"),order: SortOrder = Query(SortOrder.asc, description="Порядок сортировки"),skip:int = Query(0,ge=0,description='Сколько задач пропустить'),limit:int=Query(10,ge=1,le=100,description='Сколько задач вернуть')):
+def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр по приоритету'),SortTegi:Optional[str]=Query(None,description='Поиск по тегу'),sort_by: Optional[str] = Query("priority", description="Поле для сортировки"),order: SortOrder = Query(SortOrder.asc, description="Порядок сортировки"),skip:int = Query(0,ge=0,description='Сколько задач пропустить'),limit:int=Query(10,ge=1,le=100,description='Сколько задач вернуть'),SortBool:bool=Query(None,description='Какие задачивывести')):
     filter_tasks=todos.copy()
 
     if priority:
         filter_tasks=[task for task in filter_tasks if task.priority==priority]
     if SortTegi:
         filter_tasks=[task for task in filter_tasks if SortTegi in task.tegi]
+    if SortBool is not None:
+        filter_tasks=[task for task in filter_tasks if task.completed ==SortBool]
     if sort_by == "priority":
         priority_order = {
             Priority.low: 1,
@@ -70,8 +73,27 @@ def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр �
                           reverse=(order==SortOrder.desc))
     paginat_tasks=filter_tasks[skip:skip+limit]
     return paginat_tasks
-
-
+@app.get('/todos/sort')
+def Sorttirovka():
+    if len(todos)==0:
+        return {'message':'нет задач'}
+    c=0
+    for task in todos:
+        if task.completed:
+            c+=1
+    total=len(todos)
+    percentage=(c/total)*100
+    l=0
+    m=0
+    h=0
+    for prior in todos:
+        if prior.priority==Priority.low:
+            l+=1
+        elif prior.priority==Priority.medium:
+            m+=1
+        else:
+            h+=1
+    return {'percentage of completed tasks':percentage,'number of low priority tasks':l,'number of medium priority tasks':m,'number of high priority tasks':h}
 @app.post('/todos')
 def create_todo(todo:Todo,priority:Priority):
     todo_with_priorety=TodoAndPriority(
