@@ -1,13 +1,26 @@
 from typing import List,Optional
-from fastapi import FastAPI,Query,Body
+from fastapi import FastAPI,Query,Body,Depends
 from pydantic import BaseModel,Field
 from fastapi import HTTPException
 from enum import Enum
 from datetime import date
+from sqlalchemy.orm import Session
+from database import SessionLocal, engine, Base
+from sqlalchemy import Column,Integer,String,Boolean
 
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+def get_db():
+    db=SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+@app.get('/test-db')
+def test_db(db:Session=Depends(get_db)):
+    return  {'message':'база данных создана'}
 todos=[]
 
 
@@ -30,6 +43,7 @@ class TodoAndPriority(BaseModel):
 class SortOrder(str, Enum):
     asc = 'asc'
     desc = 'desc'
+
 @app.get('/todos/expering_date')
 def expering_date():
     today=date.today()
