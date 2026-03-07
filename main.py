@@ -3,10 +3,12 @@ from fastapi import FastAPI,Query,Body,Depends
 from pydantic import BaseModel,Field
 from fastapi import HTTPException
 from enum import Enum
-from datetime import date
+from datetime import date,datetime
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
-from sqlalchemy import Column,Integer,String,Boolean
+from sqlalchemy import Column, Integer, String, Boolean, Date
+from sqlalchemy.dialects.postgresql import ARRAY
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -24,6 +26,16 @@ def test_db(db:Session=Depends(get_db)):
 todos=[]
 
 
+class TodoDB(Base):
+    __tablename__ = "todos"
+
+    id = Column(Integer, primary_key=True)
+    title = Column(String,index=True)
+    completed = Column(Boolean, default=False)
+    priority = Column(String, index=True)
+    due_date = Column(Date, index=True)
+    created_at = Column(Date, index=True)
+    tegi = Column(ARRAY(String), nullable=True)
 class Todo(BaseModel):
     title:str
     completed:bool=False
