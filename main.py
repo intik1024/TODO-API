@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 from sqlalchemy import Column, Integer, String, Boolean, Date
 from sqlalchemy.dialects.postgresql import ARRAY
+import json
 
+from redis_client import redis_client
 
 Base.metadata.create_all(bind=engine)
 
@@ -55,28 +57,61 @@ class TodoAndPriority(BaseModel):
 class SortOrder(str, Enum):
     asc = 'asc'
     desc = 'desc'
+def todo_to_dict(todo: TodoAndPriority) -> dict:
+    return {
+        "title": todo.title,
+        "completed": todo.completed,
+        "priority": todo.priority.value,
+        "tegi": todo.tegi,
+        "due_date": todo.due_date.isoformat() if todo.due_date else None
+    }
 
+def dict_to_todo(data: dict) -> TodoAndPriority:
+    if not data:
+        return None
+    return TodoAndPriority(
+        title=data["title"],
+        completed=data["completed"],
+        priority=Priority(data["priority"]),
+        tegi=data.get("tegi", []),
+        due_date=date.fromisoformat(data["due_date"]) if data.get("due_date") else None
+    )
 @app.get('/todos/expering_date')
 def expering_date():
+    cache_key='todos:expiring'
+    cached=redis_client.get(cache_key)
+    if cached is not None:
+        return [dict_to_todo(item) for item in cached]
     today=date.today()
     exp_date=[]
     for task in todos:
         if task.due_date and task.due_date<today:
             exp_date.append(task)
+    redis_client.set(cache_key, [todo_to_dict(task) for task in exp_date], expire=60)
     return exp_date
 
 @app.get('/todos/grouped')
 def SearchTegis():
+    cache_key='todos:grouped'
+    cached=redis_client.get(cache_key)
+    if cached is not None:
+        return cached
     grouded={}
     for task in todos:
          for tag in task.tegi:
              if tag not in grouded:
                  grouded[tag]=[]
              grouded[tag].append(task)
+    redis_client.set(cache_key,grouded, expire=60)
     return grouded
 
 @app.get('/todos', response_model=List[TodoAndPriority])
 def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр по приоритету'),SortTegi:Optional[str]=Query(None,description='Поиск по тегу'),sort_by: Optional[str] = Query("priority", description="Поле для сортировки"),order: SortOrder = Query(SortOrder.asc, description="Порядок сортировки"),skip:int = Query(0,ge=0,description='Сколько задач пропустить'),limit:int=Query(10,ge=1,le=100,description='Сколько задач вернуть'),SortBool:bool=Query(None,description='Какие задачивывести')):
+    cache_key=f'todos:{priority}:{SortTegi}:{sort_by}:{order}:{skip}:{limit}:{SortBool}'
+    cached=redis_client.get(cache_key)
+    if cached is not None:
+        return [dict_to_todo(item) for item in cached]
+
     filter_tasks=todos.copy()
 
     if priority:
@@ -98,9 +133,14 @@ def get_todos(priority:Optional[Priority]=Query(None,description='Фильтр �
         filter_tasks.sort(key=lambda x: (x.due_date is None,x.due_date),
                           reverse=(order==SortOrder.desc))
     paginat_tasks=filter_tasks[skip:skip+limit]
+    redis_client.set(cache_key, [todo_to_dict(task) for task in paginat_tasks], expire=30)
     return paginat_tasks
 @app.get('/todos/sort')
 def Sorttirovka():
+    cache_key='todos:status'
+    cached=redis_client.get(cache_key)
+    if cached is not None:
+        return cached
     if len(todos)==0:
         return {'message':'нет задач'}
     c=0
@@ -119,7 +159,14 @@ def Sorttirovka():
             m+=1
         else:
             h+=1
-    return {'percentage of completed tasks':percentage,'number of low priority tasks':l,'number of medium priority tasks':m,'number of high priority tasks':h}
+    result = {
+        'percentage of completed tasks': percentage,
+        'number of low priority tasks': l,
+        'number of medium priority tasks': m,
+        'number of high priority tasks': h
+    }
+    redis_client.set(cache_key,result,expire=60)
+    return result
 @app.post('/todos')
 def create_todo(todo:Todo,priority:Priority):
     todo_with_priorety=TodoAndPriority(
@@ -130,6 +177,8 @@ def create_todo(todo:Todo,priority:Priority):
         due_date=todo.due_date
     )
     todos.append(todo_with_priorety)
+    redis_client.clear_pattern('todos:*')
+    redis_client.clear_pattern('todo:*')
     if priority == Priority.low:
         return {'message': 'Todo created', 'id': len(todos)-1,'low': priority.value}
     if priority == Priority.medium:
@@ -140,19 +189,29 @@ def create_todo(todo:Todo,priority:Priority):
 def get_todo(todo_id: int):
     if todo_id>=len(todos):
         raise HTTPException(status_code=404,detail='Todo not found')
-    return todos[todo_id]
+    cache_key=f'todo:{todo_id}'
+    cached=redis_client.get(cache_key)
+    if cached is not None:
+        return dict_to_todo(cached)
+    result = todos[todo_id]
+    redis_client.set(cache_key,todo_to_dict(result),expire=60)
+    return result
 
 @app.delete('/todos/{todo_id}')
 def delete_todo(todo_id: int):
     if todo_id>=len(todos):
         raise HTTPException(status_code=404,detail='Todo not found')
     deleted=todos.pop(todo_id)
+    redis_client.delete(f'todo:{todo_id}')
+    redis_client.clear_pattern('todos:*')
     return {'message':'Todo deleted', 'todo':deleted}
 @app.patch('/todos/{todo_id}')
 def update_completed (todo_id:int,completed:bool=Body(...,embed=True)):
     if todo_id>=len(todos):
         raise HTTPException(status_code=404,detail='Todo not found')
     todos[todo_id].completed=completed
+    redis_client.delete(f'todo:{todo_id}')
+    redis_client.clear_pattern('todos:*')
     return {'message' :f'todo update to {completed}',
             'todo':todos[todo_id]
     }
